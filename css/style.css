@@ -150,6 +150,58 @@ body {
 
 /* === TODAY VIEW === */
 
+/* Encouragement Banner (daily rotating) */
+.encouragement-banner {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--bg-section);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  text-align: center;
+  line-height: 1.5;
+  animation: fadeIn 0.4s ease;
+}
+
+/* Encouragement Toast Overlay (milestone triggers) */
+.encouragement-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--modal-overlay);
+  z-index: 250;
+  align-items: center;
+  justify-content: center;
+}
+
+.encouragement-overlay.open {
+  display: flex;
+}
+
+.encouragement-toast {
+  background: var(--bg);
+  border-radius: 16px;
+  padding: 28px 24px;
+  width: 280px;
+  text-align: center;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.6;
+  animation: toastPop 0.35s ease;
+}
+
+@keyframes toastPop {
+  0% { opacity: 0; transform: scale(0.85); }
+  60% { transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 /* Top Summary Card — D-day, Timer, Progress grouped in one card */
 .top-summary-card {
   text-align: center;

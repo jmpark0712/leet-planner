@@ -21,6 +21,9 @@
       <section id="view-today" class="view active">
         <!-- Top Summary Card: D-day + Timer + Progress in one card -->
         <div class="card top-summary-card">
+          <!-- Daily Encouragement Banner -->
+          <div class="encouragement-banner" id="encouragement-banner"></div>
+
           <div class="summary-row">
             <div class="dday" id="dday-display">D-0</div>
             <div class="progress-wrapper">
@@ -33,9 +36,7 @@
           <div class="timer-controls" id="timer-controls">
             <!-- Buttons injected by timer.js -->
           </div>
-          <div class="timer-message" id="timer-message">
-            수고하셨습니다! 오늘도 열심히 공부했어요!
-          </div>
+          <div class="timer-message" id="timer-message"></div>
 
           <!-- Completion Counts -->
           <div class="completion-counts">
@@ -365,6 +366,11 @@
 
         <button class="primary-btn" id="task-save-btn" style="margin-top: 8px;">저장</button>
       </div>
+    </div>
+
+    <!-- Encouragement Toast Overlay -->
+    <div class="encouragement-overlay" id="encouragement-overlay">
+      <div class="encouragement-toast" id="encouragement-toast"></div>
     </div>
 
     <!-- Confirm Dialog -->

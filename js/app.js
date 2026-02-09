@@ -16,6 +16,43 @@ const App = (() => {
   // ── Day names ──
   const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
+  // ── Encouragement Messages ──
+  const DAILY_MESSAGES = [
+    "오늘도 한 걸음! 🔥 파이팅이에요 💪",
+    "지금 이 순간도 실력입니다 ✨",
+    "백미람 화이팅~~! 오늘도 응원해요 😊",
+    "천천히 가도 괜찮아요 🐢 꾸준함이 답이에요",
+    "오늘 공부한 당신, 이미 대단해요 👏",
+    "한 문제씩, 한 걸음씩! 할 수 있어요 🌟",
+    "포기하지 않는 게 가장 중요해요 💜",
+    "오늘 하루도 최선을 다하는 당신이 멋져요 🌈",
+    "작은 노력이 큰 결과를 만들어요 🌱",
+    "힘들 때일수록 성장하고 있는 거예요 💫",
+    "당신의 노력은 절대 배신하지 않아요 🍀",
+    "지치더라도 쉬어가면서 하면 돼요 ☕",
+    "오늘도 열심히 하는 당신, 최고예요! 🏆",
+    "매일 조금씩, 그게 비결이에요 📚",
+    "응원합니다! 끝까지 함께할게요 🤝"
+  ];
+
+  const TIMER_COMPLETION_MESSAGES = [
+    "오늘 하루도 정말 고생했어요 🌙",
+    "6시간 완주! 스스로에게 박수 👏",
+    "오늘 할 일, 끝까지 해낸 당신이 대단해요 ✨",
+    "이만큼 해냈다는 게 중요해요 💯",
+    "긴 시간 집중한 당신, 정말 멋져요 🌟",
+    "오늘도 성실하게 완주! 대단합니다 🔥",
+    "목표 시간 달성! 자랑스러워요 🏅"
+  ];
+
+  const PLAN_COMPLETION_MESSAGES = [
+    "오늘의 할 일 모두 완료! 🎉 대단해요!",
+    "완벽한 하루! 모든 계획을 해냈어요 ✨",
+    "오늘 계획 올클리어! 👏 정말 수고했어요",
+    "할 일 전부 끝! 💪 이 기세 그대로!",
+    "오늘의 미션 컴플리트! 🏆 최고예요!"
+  ];
+
   // ── Labels ──
   const REASON_LABELS = {
     'misread': '조건 오독',
@@ -35,6 +72,58 @@ const App = (() => {
     'past-exam': '기출문제',
     'mock': '모의고사'
   };
+
+  // ── Encouragement Helpers ──
+
+  // Returns a deterministic daily index to select from a message pool
+  function getDailyIndex(pool) {
+    const today = Storage.dateStr(new Date());
+    let hash = 0;
+    for (let i = 0; i < today.length; i++) {
+      hash = ((hash << 5) - hash) + today.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash) % pool.length;
+  }
+
+  function getDailyEncouragementMessage() {
+    return DAILY_MESSAGES[getDailyIndex(DAILY_MESSAGES)];
+  }
+
+  // Key for tracking whether a milestone encouragement was shown today
+  function getEncouragementShownKey() {
+    return `leet-encouragement-${Storage.dateStr(new Date())}`;
+  }
+
+  function wasEncouragementShownToday() {
+    return localStorage.getItem(getEncouragementShownKey()) === 'true';
+  }
+
+  function markEncouragementShownToday() {
+    localStorage.setItem(getEncouragementShownKey(), 'true');
+  }
+
+  function showEncouragementToast(message) {
+    if (wasEncouragementShownToday()) return;
+    markEncouragementShownToday();
+
+    const overlay = document.getElementById('encouragement-overlay');
+    const toast = document.getElementById('encouragement-toast');
+    toast.textContent = message;
+    overlay.classList.add('open');
+
+    // Auto-dismiss after 3 seconds, or tap to dismiss
+    const dismiss = () => {
+      overlay.classList.remove('open');
+      overlay.removeEventListener('click', dismiss);
+    };
+    overlay.addEventListener('click', dismiss);
+    setTimeout(dismiss, 3000);
+  }
+
+  function getRandomMessage(pool) {
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
 
   // ── Init ──
   async function init() {
@@ -107,6 +196,9 @@ const App = (() => {
     const settings = Storage.getSettings();
     const remaining = Planner.getRemainingDays(settings.examDate);
     const today = Storage.dateStr(new Date());
+
+    // Daily encouragement banner
+    document.getElementById('encouragement-banner').textContent = getDailyEncouragementMessage();
 
     // D-day
     const ddayEl = document.getElementById('dday-display');
@@ -183,6 +275,14 @@ const App = (() => {
         task.completedAt = task.completed ? new Date().toISOString() : null;
         await Storage.updateTask(task);
         await renderTodayView();
+
+        // Check if all daily tasks are now completed
+        if (task.completed) {
+          const updatedTasks = await Storage.getTasksByDate(date);
+          if (updatedTasks.length > 0 && updatedTasks.every(t => t.completed)) {
+            showEncouragementToast(getRandomMessage(PLAN_COMPLETION_MESSAGES));
+          }
+        }
       });
     });
 
@@ -213,11 +313,20 @@ const App = (() => {
   // ══════════════════════════════════════
 
   function setupTimer() {
+    let prevState = null;
+
     Timer.init((state, remainingMs, totalMs) => {
       updateTimerUI(state, remainingMs);
+
+      // Detect transition to 'done' for encouragement trigger
+      if (state === 'done' && prevState === 'running') {
+        handleTimerCompletion(totalMs);
+      }
+      prevState = state;
     });
 
     const { state, remainingMs } = Timer.getState();
+    prevState = state;
     if (state === 'idle') {
       const settings = Storage.getSettings();
       const ms = settings.timerHours * 3600 * 1000;
@@ -225,6 +334,19 @@ const App = (() => {
     } else {
       updateTimerUI(state, remainingMs);
     }
+  }
+
+  function handleTimerCompletion(totalMs) {
+    const settings = Storage.getSettings();
+    const dailyTargetMs = settings.dailyStudyHours * 3600 * 1000;
+
+    // Only show encouragement if timer duration >= daily study target
+    if (totalMs < dailyTargetMs) return;
+
+    // Don't show if encouragement already shown today (plan completion takes priority)
+    if (wasEncouragementShownToday()) return;
+
+    showEncouragementToast(getRandomMessage(TIMER_COMPLETION_MESSAGES));
   }
 
   function updateTimerUI(state, remainingMs) {
@@ -257,8 +379,10 @@ const App = (() => {
     if (resumeBtn) resumeBtn.addEventListener('click', () => Timer.resume());
     if (resetBtn) resetBtn.addEventListener('click', () => Timer.reset());
 
+    // Timer message area — no longer shows a static message;
+    // encouragement is handled via the toast overlay
     const msg = document.getElementById('timer-message');
-    msg.classList.toggle('visible', state === 'done');
+    msg.classList.remove('visible');
   }
 
   // ══════════════════════════════════════

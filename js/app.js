@@ -143,7 +143,7 @@ const App = (() => {
 
   function registerSW() {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('/leet-planner/sw.js').catch(() => {});
     }
   }
 

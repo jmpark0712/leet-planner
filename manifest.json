@@ -2,19 +2,20 @@
   "name": "LEET 플래너",
   "short_name": "LEET",
   "description": "LEET 시험 대비 자동 학습 플래너",
-  "start_url": "/index.html",
+  "start_url": "/leet-planner/",
+  "scope": "/leet-planner/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#C62828",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "icons/icon-192.svg",
+      "src": "/leet-planner/icons/icon-192.svg",
       "sizes": "192x192",
       "type": "image/svg+xml"
     },
     {
-      "src": "icons/icon-512.svg",
+      "src": "/leet-planner/icons/icon-512.svg",
       "sizes": "512x512",
       "type": "image/svg+xml"
     }

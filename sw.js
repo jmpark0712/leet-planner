@@ -1,16 +1,17 @@
-const CACHE_NAME = 'leet-planner-v1';
+const CACHE_NAME = 'leet-planner-v2';
+const BASE_PATH = '/leet-planner';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/css/style.css',
-  '/css/themes.css',
-  '/js/storage.js',
-  '/js/timer.js',
-  '/js/planner.js',
-  '/js/app.js',
-  '/manifest.json',
-  '/icons/icon-192.svg',
-  '/icons/icon-512.svg'
+  BASE_PATH + '/',
+  BASE_PATH + '/index.html',
+  BASE_PATH + '/css/style.css',
+  BASE_PATH + '/css/themes.css',
+  BASE_PATH + '/js/storage.js',
+  BASE_PATH + '/js/timer.js',
+  BASE_PATH + '/js/planner.js',
+  BASE_PATH + '/js/app.js',
+  BASE_PATH + '/manifest.json',
+  BASE_PATH + '/icons/icon-192.svg',
+  BASE_PATH + '/icons/icon-512.svg'
 ];
 
 self.addEventListener('install', (e) => {

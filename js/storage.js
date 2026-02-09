@@ -167,8 +167,7 @@ const Storage = (() => {
     dailyStudyHours: 6,
     languageRatio: 50,
     timerHours: 6,
-    animationEnabled: true,
-    theme: 'leet-red'
+    theme: 'red'
   };
 
   function getSettings() {
@@ -219,6 +218,27 @@ const Storage = (() => {
     return dateStr(d);
   }
 
+  // ── Delete Task ──
+  async function deleteTask(taskId) {
+    return remove('tasks', taskId);
+  }
+
+  // ── Reset All Data ──
+  async function resetAllData() {
+    await openDB();
+    const storeNames = ['logs', 'tasks', 'weeklyPlans'];
+    for (const name of storeNames) {
+      await new Promise((resolve, reject) => {
+        const store = tx(name, 'readwrite');
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+    localStorage.removeItem('leet-settings');
+    localStorage.removeItem('leet-timer');
+  }
+
   // ── Init ──
   async function init() {
     await openDB();
@@ -230,13 +250,15 @@ const Storage = (() => {
     addLog, getLogs, getLogsByDate, updateLog,
     getPendingResolves, getUpcomingResolves,
     // Tasks
-    getTasksByDate, saveTasks, updateTask, getTasksInRange,
+    getTasksByDate, saveTasks, updateTask, deleteTask, getTasksInRange,
     // Weekly
     getWeeklyPlan, saveWeeklyPlan,
     // Settings
     getSettings, saveSettings,
     // Timer
     getTimerState, saveTimerState,
+    // Reset
+    resetAllData,
     // Helpers
     dateStr, addDays,
     DEFAULT_SETTINGS

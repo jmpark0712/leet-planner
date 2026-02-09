@@ -497,6 +497,71 @@ const Planner = (() => {
     };
   }
 
+  // ── Overall Progress (completed / total planned until exam) ──
+  async function getOverallProgress() {
+    const settings = Storage.getSettings();
+    const remaining = getRemainingDays(settings.examDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Count actual tasks for past/present days (look back 365 days max)
+    const lookback = Math.min(365, 365);
+    let completedTasks = 0;
+    let actualPastTasks = 0;
+
+    for (let i = 0; i < lookback; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const ds = Storage.dateStr(d);
+      const tasks = await Storage.getTasksByDate(ds);
+      actualPastTasks += tasks.length;
+      completedTasks += tasks.filter(t => t.completed).length;
+    }
+
+    // Estimate future tasks: 3 per day (max) for remaining days
+    const futureTasks = Math.max(0, remaining) * 3;
+    const totalPlanned = actualPastTasks + futureTasks;
+
+    return {
+      completed: completedTasks,
+      total: totalPlanned,
+      rate: totalPlanned > 0 ? Math.round((completedTasks / totalPlanned) * 100) : 0
+    };
+  }
+
+  // ── Completion Counts ──
+  async function getDailyCompletionCount(date) {
+    const tasks = await Storage.getTasksByDate(date);
+    const done = tasks.filter(t => t.completed).length;
+    return { done, total: tasks.length };
+  }
+
+  async function getWeeklyCompletionCount(weekStart) {
+    let done = 0, total = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = Storage.addDays(weekStart, i);
+      const tasks = await Storage.getTasksByDate(d);
+      total += tasks.length;
+      done += tasks.filter(t => t.completed).length;
+    }
+    return { done, total };
+  }
+
+  async function getMonthlyCompletionCount(year, month) {
+    let done = 0, total = 0;
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const numDays = lastDay.getDate();
+
+    for (let i = 1; i <= numDays; i++) {
+      const d = Storage.dateStr(new Date(year, month - 1, i));
+      const tasks = await Storage.getTasksByDate(d);
+      total += tasks.length;
+      done += tasks.filter(t => t.completed).length;
+    }
+    return { done, total };
+  }
+
   return {
     PHASES,
     CATEGORY_LABELS,
@@ -505,6 +570,10 @@ const Planner = (() => {
     getRemainingDays,
     getCompletionRate,
     getOverallCompletionRate,
+    getOverallProgress,
+    getDailyCompletionCount,
+    getWeeklyCompletionCount,
+    getMonthlyCompletionCount,
     generateDailyPlan,
     generateWeeklyPlan,
     generatePhaseRoadmap,

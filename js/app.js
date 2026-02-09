@@ -1,8 +1,10 @@
 /**
- * Main Application Controller
+ * Main Application Controller (v1.1)
  * - Navigation / view routing
  * - View rendering
- * - Event binding
+ * - Task editing (add/edit/delete)
+ * - Completion counts & overall progress
+ * - Data reset
  * - Service Worker registration
  */
 
@@ -14,17 +16,7 @@ const App = (() => {
   // ── Day names ──
   const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
-  // ── Growth stages ──
-  const GROWTH_STAGES = [
-    { min: 0,  max: 9,   icon: '🌰', label: '씨앗' },
-    { min: 10, max: 29,  icon: '🌱', label: '새싹' },
-    { min: 30, max: 49,  icon: '🌿', label: '줄기' },
-    { min: 50, max: 69,  icon: '🌷', label: '꽃봉오리' },
-    { min: 70, max: 89,  icon: '🌸', label: '반개화' },
-    { min: 90, max: 100, icon: '🌻', label: '만개' }
-  ];
-
-  // ── Mistake reason labels ──
+  // ── Labels ──
   const REASON_LABELS = {
     'misread': '조건 오독',
     'missing-evidence': '근거 누락',
@@ -52,16 +44,14 @@ const App = (() => {
     setupTimer();
     setupSettingsEvents();
     setupLogModal();
+    setupTaskModal();
     setupRecordsTabs();
+    setupResetData();
 
-    // Load today view
     await renderTodayView();
-
-    // Register service worker
     registerSW();
   }
 
-  // ── Service Worker ──
   function registerSW() {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
@@ -79,13 +69,6 @@ const App = (() => {
     document.getElementById('setting-ratio-label').textContent = `${s.languageRatio}:${100 - s.languageRatio}`;
     document.getElementById('setting-timer-hours').value = s.timerHours;
 
-    const animToggle = document.getElementById('setting-animation');
-    animToggle.classList.toggle('on', s.animationEnabled);
-
-    const charContainer = document.getElementById('character-container');
-    charContainer.classList.toggle('animation-off', !s.animationEnabled);
-
-    // Theme selection
     document.querySelectorAll('.theme-option').forEach(el => {
       el.classList.toggle('selected', el.dataset.theme === s.theme);
     });
@@ -94,31 +77,23 @@ const App = (() => {
   // ── Navigation ──
   function setupNavigation() {
     document.querySelectorAll('#bottom-nav button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const view = btn.dataset.view;
-        navigateTo(view);
-      });
+      btn.addEventListener('click', () => navigateTo(btn.dataset.view));
     });
   }
 
   async function navigateTo(view) {
     currentView = view;
-
-    // Update nav buttons
     document.querySelectorAll('#bottom-nav button').forEach(b => {
       b.classList.toggle('active', b.dataset.view === view);
     });
-
-    // Update views
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     const viewEl = document.getElementById(`view-${view}`);
     if (viewEl) viewEl.classList.add('active');
 
-    // Render view content
     switch (view) {
       case 'today': await renderTodayView(); break;
       case 'weekly': await renderWeeklyView(); break;
-      case 'monthly': renderMonthlyView(); break;
+      case 'monthly': await renderMonthlyView(); break;
       case 'records': await renderRecordsView(); break;
       case 'settings': loadSettings(); break;
     }
@@ -131,26 +106,31 @@ const App = (() => {
   async function renderTodayView() {
     const settings = Storage.getSettings();
     const remaining = Planner.getRemainingDays(settings.examDate);
+    const today = Storage.dateStr(new Date());
 
     // D-day
     const ddayEl = document.getElementById('dday-display');
     ddayEl.textContent = remaining > 0 ? `D-${remaining}` : (remaining === 0 ? 'D-Day' : `D+${Math.abs(remaining)}`);
 
-    // Completion rate
-    const today = Storage.dateStr(new Date());
-    const tasks = await ensureTodayTasks(today);
-    const completedCount = tasks.filter(t => t.completed).length;
-    const rate = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
+    // Overall progress (completed / total planned until exam)
+    const progress = await Planner.getOverallProgress();
+    document.getElementById('progress-rate').textContent = `${progress.rate}%`;
 
-    document.getElementById('completion-rate').textContent = `${rate}%`;
+    // Completion counts
+    const dailyCount = await Planner.getDailyCompletionCount(today);
+    document.getElementById('count-daily').textContent = `${dailyCount.done}/${dailyCount.total}`;
 
-    // Growth stage
-    const stage = GROWTH_STAGES.find(s => rate >= s.min && rate <= s.max) || GROWTH_STAGES[0];
-    document.getElementById('growth-icon').textContent = stage.icon;
-    document.getElementById('growth-label').textContent = stage.label;
+    const weekStart = Planner.getWeekStart(today);
+    const weeklyCount = await Planner.getWeeklyCompletionCount(weekStart);
+    document.getElementById('count-weekly').textContent = `${weeklyCount.done}/${weeklyCount.total}`;
+
+    const now = new Date();
+    const monthlyCount = await Planner.getMonthlyCompletionCount(now.getFullYear(), now.getMonth() + 1);
+    document.getElementById('count-monthly').textContent = `${monthlyCount.done}/${monthlyCount.total}`;
 
     // Render tasks
-    renderTasks(tasks);
+    const tasks = await ensureTodayTasks(today);
+    renderTasks(tasks, today);
   }
 
   async function ensureTodayTasks(date) {
@@ -162,7 +142,7 @@ const App = (() => {
     return tasks;
   }
 
-  function renderTasks(tasks) {
+  function renderTasks(tasks, date) {
     const container = document.getElementById('today-tasks');
     if (tasks.length === 0) {
       container.innerHTML = '<div class="empty-state">오늘의 할 일이 없습니다.</div>';
@@ -180,31 +160,52 @@ const App = (() => {
         <div class="task-item ${completed}" data-task-id="${t.id}">
           <div class="task-checkbox ${checked}" data-task-id="${t.id}"></div>
           <div class="task-content">
-            <div class="task-title">${t.title}</div>
+            <div class="task-title">${escapeHtml(t.title)}</div>
             <div class="task-meta">
               <span class="tag ${catClass}">${catLabel}</span>
               ${duration ? `<span class="task-duration">${duration}</span>` : ''}
             </div>
           </div>
+          <div class="task-actions">
+            <button class="task-action-btn" data-action="edit" data-task-id="${t.id}" title="수정">✎</button>
+            <button class="task-action-btn delete" data-action="delete" data-task-id="${t.id}" title="삭제">✕</button>
+          </div>
         </div>
       `;
     }).join('');
 
-    // Add checkbox event listeners
+    // Checkbox events
     container.querySelectorAll('.task-checkbox').forEach(cb => {
       cb.addEventListener('click', async () => {
-        const taskId = cb.dataset.taskId;
-        const task = tasks.find(t => t.id === taskId);
+        const task = tasks.find(t => t.id === cb.dataset.taskId);
         if (!task) return;
-
         task.completed = !task.completed;
         task.completedAt = task.completed ? new Date().toISOString() : null;
         await Storage.updateTask(task);
-
-        // Re-render
         await renderTodayView();
       });
     });
+
+    // Edit/Delete events
+    container.querySelectorAll('.task-action-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const taskId = btn.dataset.taskId;
+        const action = btn.dataset.action;
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        if (action === 'edit') {
+          openTaskModal(task);
+        } else if (action === 'delete') {
+          await Storage.deleteTask(taskId);
+          await renderTodayView();
+        }
+      });
+    });
+
+    // Add task button
+    const addBtn = document.getElementById('add-task-btn');
+    addBtn.onclick = () => openTaskModal(null, date);
   }
 
   // ══════════════════════════════════════
@@ -213,74 +214,142 @@ const App = (() => {
 
   function setupTimer() {
     Timer.init((state, remainingMs, totalMs) => {
-      updateTimerUI(state, remainingMs, totalMs);
+      updateTimerUI(state, remainingMs);
     });
 
-    // Initial UI state
-    const { state, remainingMs, totalMs } = Timer.getState();
+    const { state, remainingMs } = Timer.getState();
     if (state === 'idle') {
       const settings = Storage.getSettings();
       const ms = settings.timerHours * 3600 * 1000;
-      updateTimerUI('idle', ms, ms);
+      updateTimerUI('idle', ms);
     } else {
-      updateTimerUI(state, remainingMs, totalMs);
+      updateTimerUI(state, remainingMs);
     }
   }
 
-  function updateTimerUI(state, remainingMs, totalMs) {
-    // Display
-    const display = document.getElementById('timer-display');
-    display.textContent = Timer.formatTime(remainingMs);
+  function updateTimerUI(state, remainingMs) {
+    document.getElementById('timer-display').textContent = Timer.formatTime(remainingMs);
 
-    // Controls
     const controls = document.getElementById('timer-controls');
     let html = '';
     switch (state) {
       case 'idle':
-        html = `<button class="timer-btn timer-btn-primary" id="btn-timer-start">시작</button>`;
+        html = '<button class="timer-btn timer-btn-primary" id="btn-timer-start">시작</button>';
         break;
       case 'running':
-        html = `
-          <button class="timer-btn timer-btn-primary" id="btn-timer-pause">일시정지</button>
-          <button class="timer-btn timer-btn-secondary" id="btn-timer-reset">초기화</button>
-        `;
+        html = '<button class="timer-btn timer-btn-primary" id="btn-timer-pause">일시정지</button><button class="timer-btn timer-btn-secondary" id="btn-timer-reset">초기화</button>';
         break;
       case 'paused':
-        html = `
-          <button class="timer-btn timer-btn-primary" id="btn-timer-resume">이어하기</button>
-          <button class="timer-btn timer-btn-secondary" id="btn-timer-reset">초기화</button>
-        `;
+        html = '<button class="timer-btn timer-btn-primary" id="btn-timer-resume">이어하기</button><button class="timer-btn timer-btn-secondary" id="btn-timer-reset">초기화</button>';
         break;
       case 'done':
-        html = `<button class="timer-btn timer-btn-secondary" id="btn-timer-reset">초기화</button>`;
+        html = '<button class="timer-btn timer-btn-secondary" id="btn-timer-reset">초기화</button>';
         break;
     }
     controls.innerHTML = html;
 
-    // Bind button events
     const startBtn = document.getElementById('btn-timer-start');
     const pauseBtn = document.getElementById('btn-timer-pause');
     const resumeBtn = document.getElementById('btn-timer-resume');
     const resetBtn = document.getElementById('btn-timer-reset');
-
     if (startBtn) startBtn.addEventListener('click', () => Timer.start());
     if (pauseBtn) pauseBtn.addEventListener('click', () => Timer.pause());
     if (resumeBtn) resumeBtn.addEventListener('click', () => Timer.resume());
     if (resetBtn) resetBtn.addEventListener('click', () => Timer.reset());
 
-    // Character state
-    const container = document.getElementById('character-container');
-    container.className = 'character-container';
-    container.classList.add(`character-state-${state}`);
-
-    const settings = Storage.getSettings();
-    if (!settings.animationEnabled) {
-      container.classList.add('animation-off');
-    }
-
-    // Done message
     const msg = document.getElementById('timer-message');
     msg.classList.toggle('visible', state === 'done');
+  }
+
+  // ══════════════════════════════════════
+  // ══ TASK EDITING MODAL
+  // ══════════════════════════════════════
+
+  function setupTaskModal() {
+    const modal = document.getElementById('task-modal');
+    const closeBtn = document.getElementById('task-modal-close');
+    const saveBtn = document.getElementById('task-save-btn');
+
+    closeBtn.addEventListener('click', () => modal.classList.remove('open'));
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.remove('open');
+    });
+
+    setupRadioGroup('task-edit-category');
+
+    saveBtn.addEventListener('click', async () => {
+      const title = document.getElementById('task-edit-title').value.trim();
+      if (!title) return;
+
+      const category = getRadioValue('task-edit-category') || 'review';
+      const duration = parseInt(document.getElementById('task-edit-duration').value) || 0;
+      const existingId = document.getElementById('task-edit-id').value;
+      const date = document.getElementById('task-edit-date').value || Storage.dateStr(new Date());
+
+      if (existingId) {
+        // Edit existing task
+        const tasks = await Storage.getTasksByDate(date);
+        const task = tasks.find(t => t.id === existingId);
+        if (task) {
+          task.title = title;
+          task.category = category;
+          task.estimatedMinutes = duration || null;
+          await Storage.updateTask(task);
+        }
+      } else {
+        // Add new task
+        const newTask = {
+          id: `task-${date}-manual-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+          date: date,
+          title: title,
+          category: category,
+          estimatedMinutes: duration || null,
+          completed: false,
+          completedAt: null
+        };
+        await Storage.saveTasks([newTask]);
+      }
+
+      modal.classList.remove('open');
+
+      // Re-render current view
+      if (currentView === 'today') await renderTodayView();
+      else if (currentView === 'weekly') await renderWeeklyView();
+      else if (currentView === 'monthly') await renderMonthlyView();
+    });
+  }
+
+  function openTaskModal(task, date) {
+    const modal = document.getElementById('task-modal');
+    const titleEl = document.getElementById('task-modal-title');
+    const inputTitle = document.getElementById('task-edit-title');
+    const inputDuration = document.getElementById('task-edit-duration');
+    const inputId = document.getElementById('task-edit-id');
+    const inputDate = document.getElementById('task-edit-date');
+
+    if (task) {
+      titleEl.textContent = '할 일 수정';
+      inputTitle.value = task.title;
+      inputDuration.value = task.estimatedMinutes || '';
+      inputId.value = task.id;
+      inputDate.value = task.date;
+      // Select category
+      document.querySelectorAll('#task-edit-category .form-radio').forEach(r => {
+        r.classList.toggle('selected', r.dataset.value === task.category);
+      });
+    } else {
+      titleEl.textContent = '할 일 추가';
+      inputTitle.value = '';
+      inputDuration.value = '';
+      inputId.value = '';
+      inputDate.value = date || Storage.dateStr(new Date());
+      document.querySelectorAll('#task-edit-category .form-radio').forEach((r, i) => {
+        r.classList.toggle('selected', i === 0);
+      });
+    }
+
+    modal.classList.add('open');
+    inputTitle.focus();
   }
 
   // ══════════════════════════════════════
@@ -293,13 +362,11 @@ const App = (() => {
       currentWeekStart = Planner.getWeekStart(today);
     }
 
-    // Week label
     const weekDate = new Date(currentWeekStart + 'T00:00:00');
     const month = weekDate.getMonth() + 1;
     const weekNum = Math.ceil(weekDate.getDate() / 7);
     document.getElementById('week-label').textContent = `${month}월 ${weekNum}주차`;
 
-    // Navigation
     document.getElementById('prev-week').onclick = async () => {
       currentWeekStart = Storage.addDays(currentWeekStart, -7);
       await renderWeeklyView();
@@ -308,8 +375,6 @@ const App = (() => {
       currentWeekStart = Storage.addDays(currentWeekStart, 7);
       await renderWeeklyView();
     };
-
-    // Generate button
     document.getElementById('generate-week-btn').onclick = async () => {
       const nextWeek = Storage.addDays(currentWeekStart, 7);
       currentWeekStart = nextWeek;
@@ -322,6 +387,10 @@ const App = (() => {
     document.getElementById('weekly-review-rate').textContent = `${rates.reviewRate}%`;
     document.getElementById('weekly-resolve-rate').textContent = `${rates.resolveRate}%`;
 
+    // Weekly completion count
+    const weeklyCount = await Planner.getWeeklyCompletionCount(currentWeekStart);
+    document.getElementById('weekly-completion-count').textContent = `${weeklyCount.done}/${weeklyCount.total}`;
+
     // Days
     const daysContainer = document.getElementById('weekly-days');
     let daysHtml = '';
@@ -333,7 +402,7 @@ const App = (() => {
       const displayDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
       const isToday = d === today;
 
-      let tasks = await Storage.getTasksByDate(d);
+      const tasks = await Storage.getTasksByDate(d);
       const doneCount = tasks.filter(t => t.completed).length;
       const totalCount = tasks.length;
       const dayCompletion = totalCount > 0 ? `${doneCount}/${totalCount}` : '-';
@@ -341,11 +410,11 @@ const App = (() => {
       const tasksHtml = tasks.map(t => {
         const done = t.completed ? 'done' : '';
         const checkDone = t.completed ? 'done' : '';
-        const catLabel = Planner.CATEGORY_LABELS[t.category] || '';
         return `
           <div class="day-task ${done}">
             <span class="day-task-check ${checkDone}">${t.completed ? '✓' : ''}</span>
-            <span>${catLabel} ${t.title}</span>
+            <span>${escapeHtml(t.title)}</span>
+            <button class="task-action-btn delete" style="margin-left:auto;width:20px;height:20px;font-size:10px;" data-weekly-delete="${t.id}" data-date="${d}" title="삭제">✕</button>
           </div>
         `;
       }).join('');
@@ -359,44 +428,59 @@ const App = (() => {
           <div class="day-tasks">
             ${tasksHtml || '<div class="day-task" style="opacity:0.4;">계획 없음</div>'}
           </div>
+          <button class="add-task-btn" style="margin-top:4px;padding:6px;font-size:11px;" data-add-date="${d}">+ 추가</button>
         </div>
       `;
     }
 
     daysContainer.innerHTML = daysHtml;
+
+    // Bind weekly add buttons
+    daysContainer.querySelectorAll('[data-add-date]').forEach(btn => {
+      btn.addEventListener('click', () => openTaskModal(null, btn.dataset.addDate));
+    });
+
+    // Bind weekly delete buttons
+    daysContainer.querySelectorAll('[data-weekly-delete]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await Storage.deleteTask(btn.dataset.weeklyDelete);
+        await renderWeeklyView();
+      });
+    });
   }
 
   // ══════════════════════════════════════
   // ══ MONTHLY VIEW
   // ══════════════════════════════════════
 
-  function renderMonthlyView() {
+  async function renderMonthlyView() {
     const settings = Storage.getSettings();
+
+    // Monthly completion count
+    const now = new Date();
+    const monthlyCount = await Planner.getMonthlyCompletionCount(now.getFullYear(), now.getMonth() + 1);
+    document.getElementById('monthly-completion-count').textContent = `${monthlyCount.done}/${monthlyCount.total}`;
 
     // Phase roadmap
     const phases = Planner.generatePhaseRoadmap(settings.examDate);
     const phaseContainer = document.getElementById('phase-timeline');
-
     phaseContainer.innerHTML = phases.map(p => {
       const currentClass = p.isCurrent ? 'current' : '';
       const completedClass = p.isCompleted ? 'completed' : '';
-      const startDate = formatDateShort(p.startDate);
-      const endDate = formatDateShort(p.endDate);
-
       return `
         <div class="phase-card ${currentClass} ${completedClass}">
           <div class="phase-dot"></div>
           <div class="phase-name">${p.name}</div>
           <div class="phase-desc">${p.desc}</div>
-          <div class="phase-dates">${startDate} ~ ${endDate} (${p.days}일)</div>
+          <div class="phase-dates">${formatDateShort(p.startDate)} ~ ${formatDateShort(p.endDate)} (${p.days}일)</div>
         </div>
       `;
     }).join('');
 
     // Milestones
     const milestones = Planner.generateMilestones(settings.examDate);
-    const msContainer = document.getElementById('milestones-list');
-    msContainer.innerHTML = milestones.map(m => `
+    document.getElementById('milestones-list').innerHTML = milestones.map(m => `
       <div class="milestone-item">
         <span class="milestone-month">${m.month}</span>
         <span class="milestone-text">${m.text}</span>
@@ -406,8 +490,7 @@ const App = (() => {
     // Subject ratio
     const langRatio = settings.languageRatio;
     const logicRatio = 100 - langRatio;
-    const ratioBar = document.getElementById('monthly-ratio-bar');
-    ratioBar.innerHTML = `
+    document.getElementById('monthly-ratio-bar').innerHTML = `
       <div class="ratio-segment ratio-language" style="width:${langRatio}%">언어 ${langRatio}%</div>
       <div class="ratio-segment ratio-logic" style="width:${logicRatio}%">추리 ${logicRatio}%</div>
     `;
@@ -451,15 +534,14 @@ const App = (() => {
 
       let reasonHtml = '';
       if (!l.correct && l.mistakeReason) {
-        const reasonLabel = REASON_LABELS[l.mistakeReason] || l.mistakeReason;
-        reasonHtml = `<div class="log-reason">원인: ${reasonLabel}</div>`;
+        reasonHtml = `<div class="log-reason">원인: ${REASON_LABELS[l.mistakeReason] || l.mistakeReason}</div>`;
       }
 
       let resolveHtml = '';
       if (!l.correct) {
-        const r7Status = l.resolved7 ? '완료' : l.resolveDate7;
-        const r30Status = l.resolved30 ? '완료' : l.resolveDate30;
-        resolveHtml = `<div class="log-resolve-info">재풀이: 7일(${r7Status}) / 30일(${r30Status})</div>`;
+        const r7 = l.resolved7 ? '완료' : l.resolveDate7;
+        const r30 = l.resolved30 ? '완료' : l.resolveDate30;
+        resolveHtml = `<div class="log-resolve-info">재풀이: 7일(${r7}) / 30일(${r30})</div>`;
       }
 
       return `
@@ -469,11 +551,10 @@ const App = (() => {
             <span class="log-result ${resultClass}">${resultLabel}</span>
           </div>
           <div class="log-detail">
-            <span class="tag tag-${l.subject === 'language' ? 'language' : l.subject === 'logic' ? 'logic' : 'essay'}">${subjectLabel}</span>
+            <span class="tag tag-${l.subject}">${subjectLabel}</span>
             ${materialLabel}
           </div>
-          ${reasonHtml}
-          ${resolveHtml}
+          ${reasonHtml}${resolveHtml}
         </div>
       `;
     }).join('');
@@ -483,93 +564,68 @@ const App = (() => {
     const logs = await Storage.getLogs();
     const incorrectLogs = logs.filter(l => !l.correct);
 
-    // Top mistake reasons
+    // Mistake reasons
     const reasonCounts = {};
     incorrectLogs.forEach(l => {
-      if (l.mistakeReason) {
-        reasonCounts[l.mistakeReason] = (reasonCounts[l.mistakeReason] || 0) + 1;
-      }
+      if (l.mistakeReason) reasonCounts[l.mistakeReason] = (reasonCounts[l.mistakeReason] || 0) + 1;
     });
-
     const reasonContainer = document.getElementById('mistake-reasons');
-    const maxReasonCount = Math.max(1, ...Object.values(reasonCounts));
-
+    const maxR = Math.max(1, ...Object.values(reasonCounts));
     if (Object.keys(reasonCounts).length === 0) {
       reasonContainer.innerHTML = '<div class="empty-state">오답 데이터가 없습니다.</div>';
     } else {
-      const sortedReasons = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]);
-      reasonContainer.innerHTML = sortedReasons.map(([reason, count]) => {
-        const label = REASON_LABELS[reason] || reason;
-        const pct = Math.round((count / maxReasonCount) * 100);
-        return `
-          <div class="reason-bar-item">
-            <span class="reason-label">${label}</span>
-            <div class="reason-bar"><div class="reason-bar-fill" style="width:${pct}%"></div></div>
-            <span class="reason-count">${count}</span>
-          </div>
-        `;
-      }).join('');
+      reasonContainer.innerHTML = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]).map(([r, c]) => `
+        <div class="reason-bar-item">
+          <span class="reason-label">${REASON_LABELS[r] || r}</span>
+          <div class="reason-bar"><div class="reason-bar-fill" style="width:${Math.round((c / maxR) * 100)}%"></div></div>
+          <span class="reason-count">${c}</span>
+        </div>
+      `).join('');
     }
 
     // Weak subjects
-    const subjectCounts = {};
-    incorrectLogs.forEach(l => {
-      subjectCounts[l.subject] = (subjectCounts[l.subject] || 0) + 1;
-    });
-
-    const subjectContainer = document.getElementById('weak-subjects');
-    const maxSubjectCount = Math.max(1, ...Object.values(subjectCounts));
-
-    if (Object.keys(subjectCounts).length === 0) {
-      subjectContainer.innerHTML = '<div class="empty-state">오답 데이터가 없습니다.</div>';
+    const subjCounts = {};
+    incorrectLogs.forEach(l => { subjCounts[l.subject] = (subjCounts[l.subject] || 0) + 1; });
+    const subjContainer = document.getElementById('weak-subjects');
+    const maxS = Math.max(1, ...Object.values(subjCounts));
+    if (Object.keys(subjCounts).length === 0) {
+      subjContainer.innerHTML = '<div class="empty-state">오답 데이터가 없습니다.</div>';
     } else {
-      const sortedSubjects = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1]);
-      subjectContainer.innerHTML = sortedSubjects.map(([subject, count]) => {
-        const label = SUBJECT_LABELS[subject] || subject;
-        const pct = Math.round((count / maxSubjectCount) * 100);
-        return `
-          <div class="reason-bar-item">
-            <span class="reason-label">${label}</span>
-            <div class="reason-bar"><div class="reason-bar-fill" style="width:${pct}%"></div></div>
-            <span class="reason-count">${count}</span>
-          </div>
-        `;
-      }).join('');
+      subjContainer.innerHTML = Object.entries(subjCounts).sort((a, b) => b[1] - a[1]).map(([s, c]) => `
+        <div class="reason-bar-item">
+          <span class="reason-label">${SUBJECT_LABELS[s] || s}</span>
+          <div class="reason-bar"><div class="reason-bar-fill" style="width:${Math.round((c / maxS) * 100)}%"></div></div>
+          <span class="reason-count">${c}</span>
+        </div>
+      `).join('');
     }
 
     // Pending re-solves
     const resolves = await Storage.getUpcomingResolves();
     const resolveContainer = document.getElementById('resolve-list');
-
     if (resolves.length === 0) {
       resolveContainer.innerHTML = '<div class="empty-state">재풀이 대기 항목이 없습니다.</div>';
     } else {
       resolveContainer.innerHTML = resolves.map(r => {
-        const subjectLabel = SUBJECT_LABELS[r.subject] || r.subject;
-        const overdueClass = r.overdue ? 'style="color:var(--primary);font-weight:700;"' : '';
+        const overdueStyle = r.overdue ? 'style="color:var(--primary);font-weight:700;"' : '';
         return `
           <div class="resolve-item">
             <div>
-              <div class="resolve-info">${subjectLabel} (${r.resolveType} 재풀이)</div>
-              <div class="resolve-date" ${overdueClass}>${formatDateShort(r.dueDate)}${r.overdue ? ' (기한 도래)' : ''}</div>
+              <div class="resolve-info">${SUBJECT_LABELS[r.subject] || r.subject} (${r.resolveType} 재풀이)</div>
+              <div class="resolve-date" ${overdueStyle}>${formatDateShort(r.dueDate)}${r.overdue ? ' (기한 도래)' : ''}</div>
             </div>
             <button class="resolve-complete-btn" data-log-id="${r.id}" data-type="${r.resolveType}">완료</button>
           </div>
         `;
       }).join('');
 
-      // Bind complete buttons
       resolveContainer.querySelectorAll('.resolve-complete-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-          const logId = btn.dataset.logId;
-          const type = btn.dataset.type;
-          const logs = await Storage.getLogs();
-          const log = logs.find(l => l.id === logId);
+          const allLogs = await Storage.getLogs();
+          const log = allLogs.find(l => l.id === btn.dataset.logId);
           if (!log) return;
-
-          if (type === '7일') log.resolved7 = true;
-          if (type === '30일') log.resolved30 = true;
-
+          if (btn.dataset.type === '7일') log.resolved7 = true;
+          if (btn.dataset.type === '30일') log.resolved30 = true;
           await Storage.updateLog(log);
           await renderRecordsView();
         });
@@ -589,7 +645,7 @@ const App = (() => {
 
     addBtn.addEventListener('click', () => {
       document.getElementById('log-date').value = Storage.dateStr(new Date());
-      resetModalSelections();
+      resetLogModalSelections();
       modal.classList.add('open');
     });
 
@@ -598,14 +654,12 @@ const App = (() => {
       if (e.target === modal) modal.classList.remove('open');
     });
 
-    // Radio groups
     setupRadioGroup('log-subject');
     setupRadioGroup('log-material');
     setupRadioGroup('log-correct', (value) => {
       document.getElementById('mistake-reason-group').style.display = value === 'false' ? 'block' : 'none';
     });
 
-    // Mistake reason chips
     document.querySelectorAll('#log-reason .form-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         document.querySelectorAll('#log-reason .form-chip').forEach(c => c.classList.remove('selected'));
@@ -613,36 +667,119 @@ const App = (() => {
       });
     });
 
-    // Save
     saveBtn.addEventListener('click', async () => {
       const date = document.getElementById('log-date').value;
       const subject = getRadioValue('log-subject');
       const materialType = getRadioValue('log-material');
       const correct = getRadioValue('log-correct') === 'true';
       let mistakeReason = null;
-
       if (!correct) {
-        const selectedChip = document.querySelector('#log-reason .form-chip.selected');
-        mistakeReason = selectedChip ? selectedChip.dataset.value : null;
+        const chip = document.querySelector('#log-reason .form-chip.selected');
+        mistakeReason = chip ? chip.dataset.value : null;
       }
 
-      const entry = {
-        date,
-        subject,
-        materialType,
-        correct,
-        mistakeReason,
+      await Storage.addLog({
+        date, subject, materialType, correct, mistakeReason,
         resolveDate7: correct ? null : Storage.addDays(date, 7),
         resolveDate30: correct ? null : Storage.addDays(date, 30),
-        resolved7: false,
-        resolved30: false
-      };
-
-      await Storage.addLog(entry);
+        resolved7: false, resolved30: false
+      });
       modal.classList.remove('open');
       await renderRecordsView();
     });
   }
+
+  function resetLogModalSelections() {
+    ['log-subject', 'log-material', 'log-correct'].forEach(id => {
+      document.querySelectorAll(`#${id} .form-radio`).forEach((r, i) => r.classList.toggle('selected', i === 0));
+    });
+    document.querySelectorAll('#log-reason .form-chip').forEach(c => c.classList.remove('selected'));
+    document.getElementById('mistake-reason-group').style.display = 'none';
+  }
+
+  // ══════════════════════════════════════
+  // ══ SETTINGS
+  // ══════════════════════════════════════
+
+  function setupSettingsEvents() {
+    document.getElementById('setting-exam-date').addEventListener('change', (e) => {
+      const s = Storage.getSettings();
+      s.examDate = e.target.value;
+      Storage.saveSettings(s);
+    });
+
+    document.getElementById('setting-daily-hours').addEventListener('change', (e) => {
+      const s = Storage.getSettings();
+      s.dailyStudyHours = parseInt(e.target.value) || 6;
+      Storage.saveSettings(s);
+    });
+
+    const ratioSlider = document.getElementById('setting-ratio');
+    ratioSlider.addEventListener('input', (e) => {
+      document.getElementById('setting-ratio-label').textContent = `${e.target.value}:${100 - e.target.value}`;
+    });
+    ratioSlider.addEventListener('change', (e) => {
+      const s = Storage.getSettings();
+      s.languageRatio = parseInt(e.target.value);
+      Storage.saveSettings(s);
+    });
+
+    document.getElementById('setting-timer-hours').addEventListener('change', (e) => {
+      const s = Storage.getSettings();
+      s.timerHours = parseInt(e.target.value) || 6;
+      Storage.saveSettings(s);
+    });
+
+    document.querySelectorAll('.theme-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const theme = opt.dataset.theme;
+        const s = Storage.getSettings();
+        s.theme = theme;
+        Storage.saveSettings(s);
+        document.documentElement.setAttribute('data-theme', theme);
+        document.querySelectorAll('.theme-option').forEach(o => o.classList.toggle('selected', o.dataset.theme === theme));
+      });
+    });
+  }
+
+  // ══════════════════════════════════════
+  // ══ RESET DATA
+  // ══════════════════════════════════════
+
+  function setupResetData() {
+    document.getElementById('reset-data-btn').addEventListener('click', () => {
+      showConfirm('데이터 초기화', '모든 학습 기록, 계획, 설정이 삭제됩니다. 계속하시겠습니까?', async () => {
+        await Storage.resetAllData();
+        location.reload();
+      });
+    });
+  }
+
+  function showConfirm(title, msg, onConfirm) {
+    const overlay = document.getElementById('confirm-dialog');
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-msg').textContent = msg;
+    overlay.classList.add('open');
+
+    const cancelBtn = document.getElementById('confirm-cancel');
+    const okBtn = document.getElementById('confirm-ok');
+
+    const cleanup = () => {
+      overlay.classList.remove('open');
+      cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+      okBtn.replaceWith(okBtn.cloneNode(true));
+    };
+
+    document.getElementById('confirm-cancel').addEventListener('click', cleanup);
+    document.getElementById('confirm-ok').addEventListener('click', () => {
+      cleanup();
+      onConfirm();
+    });
+  }
+
+  // ══════════════════════════════════════
+  // ══ HELPERS
+  // ══════════════════════════════════════
 
   function setupRadioGroup(containerId, onChange) {
     const container = document.getElementById(containerId);
@@ -656,94 +793,9 @@ const App = (() => {
   }
 
   function getRadioValue(containerId) {
-    const selected = document.querySelector(`#${containerId} .form-radio.selected`);
-    return selected ? selected.dataset.value : null;
+    const sel = document.querySelector(`#${containerId} .form-radio.selected`);
+    return sel ? sel.dataset.value : null;
   }
-
-  function resetModalSelections() {
-    // Reset subject
-    document.querySelectorAll('#log-subject .form-radio').forEach((r, i) => {
-      r.classList.toggle('selected', i === 0);
-    });
-    // Reset material
-    document.querySelectorAll('#log-material .form-radio').forEach((r, i) => {
-      r.classList.toggle('selected', i === 0);
-    });
-    // Reset correct
-    document.querySelectorAll('#log-correct .form-radio').forEach((r, i) => {
-      r.classList.toggle('selected', i === 0);
-    });
-    // Reset reason
-    document.querySelectorAll('#log-reason .form-chip').forEach(c => c.classList.remove('selected'));
-    document.getElementById('mistake-reason-group').style.display = 'none';
-  }
-
-  // ══════════════════════════════════════
-  // ══ SETTINGS
-  // ══════════════════════════════════════
-
-  function setupSettingsEvents() {
-    // Exam date
-    document.getElementById('setting-exam-date').addEventListener('change', (e) => {
-      const s = Storage.getSettings();
-      s.examDate = e.target.value;
-      Storage.saveSettings(s);
-    });
-
-    // Daily hours
-    document.getElementById('setting-daily-hours').addEventListener('change', (e) => {
-      const s = Storage.getSettings();
-      s.dailyStudyHours = parseInt(e.target.value) || 6;
-      Storage.saveSettings(s);
-    });
-
-    // Ratio slider
-    const ratioSlider = document.getElementById('setting-ratio');
-    ratioSlider.addEventListener('input', (e) => {
-      const val = parseInt(e.target.value);
-      document.getElementById('setting-ratio-label').textContent = `${val}:${100 - val}`;
-    });
-    ratioSlider.addEventListener('change', (e) => {
-      const s = Storage.getSettings();
-      s.languageRatio = parseInt(e.target.value);
-      Storage.saveSettings(s);
-    });
-
-    // Timer hours
-    document.getElementById('setting-timer-hours').addEventListener('change', (e) => {
-      const s = Storage.getSettings();
-      s.timerHours = parseInt(e.target.value) || 6;
-      Storage.saveSettings(s);
-    });
-
-    // Animation toggle
-    document.getElementById('setting-animation').addEventListener('click', (e) => {
-      const toggle = e.currentTarget;
-      const s = Storage.getSettings();
-      s.animationEnabled = !s.animationEnabled;
-      toggle.classList.toggle('on', s.animationEnabled);
-      document.getElementById('character-container').classList.toggle('animation-off', !s.animationEnabled);
-      Storage.saveSettings(s);
-    });
-
-    // Theme selection
-    document.querySelectorAll('.theme-option').forEach(opt => {
-      opt.addEventListener('click', () => {
-        const theme = opt.dataset.theme;
-        const s = Storage.getSettings();
-        s.theme = theme;
-        Storage.saveSettings(s);
-        document.documentElement.setAttribute('data-theme', theme);
-        document.querySelectorAll('.theme-option').forEach(o => {
-          o.classList.toggle('selected', o.dataset.theme === theme);
-        });
-      });
-    });
-  }
-
-  // ══════════════════════════════════════
-  // ══ HELPERS
-  // ══════════════════════════════════════
 
   function formatDateShort(dateStr) {
     if (!dateStr) return '';
@@ -751,8 +803,13 @@ const App = (() => {
     return `${d.getMonth() + 1}/${d.getDate()}`;
   }
 
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
   return { init };
 })();
 
-// ── Bootstrap ──
 document.addEventListener('DOMContentLoaded', () => App.init());

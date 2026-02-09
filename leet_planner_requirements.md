@@ -79,6 +79,36 @@ daily/weekly/monthly plans, and priorities without requiring users to manually p
 
 ## 5. Main Screen (Today View)
 
+### Top Banner Encouragement Message (MUST)
+
+- A short encouragement message must be displayed at the top area of the main screen.
+- This message is shown above or within the Top Summary Card.
+- The purpose of this message is emotional support and motivation, not information delivery.
+
+### Message Rules
+- Messages must be written in Korean.
+- Messages may include emojis.
+- Tone: friendly, warm, supportive (not formal, not instructional).
+- Messages should feel like cheering from a close supporter.
+
+### Message Variations
+- The encouragement message must change daily.
+- Messages are randomly selected from a predefined message pool.
+- Repetition is allowed but should be minimized when possible.
+
+### Example Messages (Non-exhaustive)
+- "오늘도 한 걸음! 🔥 파이팅이에요 💪"
+- "지금 이 순간도 실력입니다 ✨"
+- "백미람 화이팅~~! 오늘도 응원해요 😊"
+- "천천히 가도 괜찮아요 🐢 꾸준함이 답이에요"
+- "오늘 공부한 당신, 이미 대단해요 👏"
+
+### Personalization (Optional, v1)
+- If a user name or nickname is available, the message may include it.
+- Personalization is optional and must not be required for core functionality.
+
+---
+
 ### Top Summary Card (MUST)
 The top area must be implemented as a **single card container** that includes:
 
@@ -88,12 +118,66 @@ The top area must be implemented as a **single card container** that includes:
 
 All three elements must be visually grouped in the same box/card.
 
+---
+
 ### Study Timer
 - Default duration: 6 hours (user-adjustable)
 - Start / Pause / Resume / Reset
 - Timer state must persist across reloads
-- When the timer ends, show a supportive or congratulatory message
-  (UI message language: Korean)
+
+---
+
+### Encouragement Message Triggers (IMPORTANT)
+
+Encouragement messages must be displayed not only on app open,
+but also when meaningful study milestones are reached.
+
+#### Timer Completion Trigger
+
+- When a study timer ends, an encouragement message MAY be displayed
+  depending on the timer duration.
+
+##### Rules
+- If the timer duration is LESS than the daily study target time:
+  - No encouragement message is shown.
+  - Rationale: short timers are assumed to be partial sessions
+    (e.g. mock exams, drills).
+
+- If the timer duration is EQUAL TO or GREATER than the daily study target time:
+  - Display a dedicated encouragement message.
+  - This message represents completion of the day’s study goal.
+
+##### Example Messages (Daily Study Completion)
+- "오늘 하루도 정말 고생했어요 🌙"
+- "6시간 완주! 스스로에게 박수 👏"
+- "오늘 할 일, 끝까지 해낸 미람이가 대단해요 ✨"
+- "이만큼 해냈다는 게 중요해요 💯"
+
+---
+
+#### Daily Plan Completion Trigger
+
+- When all tasks in the daily plan are marked as completed:
+  - Display an encouragement message.
+- This trigger is independent of the timer.
+
+##### Priority Rule
+- If both timer completion and daily plan completion occur on the same day:
+  - The message must be shown only once.
+  - Priority order:
+    1) Daily plan completion
+    2) Timer completion
+
+---
+
+#### Message Behavior Rules
+- Encouragement messages triggered by completion must:
+  - Appear as a modal, toast, or banner overlay
+  - Be visually distinguishable from the daily rotating banner message
+- Messages must NOT interrupt an active timer session.
+- Messages must NOT stack or repeat excessively.
+
+---
 
 ### Overall Progress Rate
 - Progress represents advancement toward the exam date.

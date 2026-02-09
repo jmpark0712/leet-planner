@@ -1,7 +1,7 @@
 # LEET Planner PWA – Requirements
 
 ## Document Information
-- Version: v1.0
+- Version: v1.1
 - Target Exam: LEET
 - Exam Date: 2026-07-19 (Sun)
 - Purpose: A PWA-based LEET study planner that automatically determines study direction,
@@ -16,7 +16,7 @@ A LEET-specific study planner PWA that automatically sets learning direction,
 daily/weekly/monthly plans, and priorities without requiring users to manually plan.
 
 ### Core Philosophy
-- Improve scores by eliminating mistake patterns, not increasing volume
+- Improve scores by eliminating mistake patterns, not by increasing volume
 - Prioritize review and re-solving over raw problem counts
 - Build a sustainable study structure rather than short-term motivation
 
@@ -33,7 +33,8 @@ daily/weekly/monthly plans, and priorities without requiring users to manually p
 - LEET Language Reasoning and Logical Reasoning planner
 - Automatic daily / weekly / monthly plan generation
 - Phase-based long-term roadmap
-- Study timer, completion rate, growth visualization
+- Study timer and progress tracking
+- Editable plans (daily / weekly / monthly)
 - Mistake logging and scheduled re-solving
 - iOS Safari–compatible PWA
 - Offline usage support
@@ -43,7 +44,7 @@ daily/weekly/monthly plans, and priorities without requiring users to manually p
 - Cloud sync
 - Payments / subscriptions
 - Social or study group features
-- Push notifications (may be added later)
+- Push notifications
 
 ---
 
@@ -52,6 +53,7 @@ daily/weekly/monthly plans, and priorities without requiring users to manually p
 - Review completion rate is higher than problem-solving completion rate
 - Mistake patterns decrease over time
 - Re-solving (7-day / 30-day) completion rate increases
+- Progress increases steadily toward the exam date
 
 ---
 
@@ -77,66 +79,82 @@ daily/weekly/monthly plans, and priorities without requiring users to manually p
 
 ## 5. Main Screen (Today View)
 
-### Fixed Top Elements
+### Top Summary Card (MUST)
+The top area must be implemented as a **single card container** that includes:
+
 - D-day countdown (based on exam date)
 - Study timer
-- Overall completion rate (%)
+- Overall progress rate
+
+All three elements must be visually grouped in the same box/card.
 
 ### Study Timer
 - Default duration: 6 hours (user-adjustable)
 - Start / Pause / Resume / Reset
-- Timer state must persist across app reloads
-- When timer ends, show a congratulatory/supportive message
+- Timer state must persist across reloads
+- When the timer ends, show a supportive or congratulatory message
   (UI message language: Korean)
 
-### Timer Character Animation
-- Character appearance changes by timer state:
-  - IDLE: waiting state
-  - RUNNING: sweating and running animation
-  - PAUSED: resting animation
-  - DONE: happy/celebration state (optional)
-- Animation switches immediately when state changes
-- Must run smoothly on iOS Safari
-- Animation ON/OFF option available in settings
-
-### Today's Tasks
-- 1–3 tasks automatically generated
-- Each task includes:
-  - Checkbox
-  - Category tag (Language / Logic / Essay / Review / Re-solve / Mock)
-  - Estimated duration (optional)
-- Completion instantly updates progress
-
-### Completion Rate Visualization
-- Numeric percentage display (e.g., 37%)
-- Growth-stage visual indicator shown next to percentage
-
-### Growth Stages
-- 0–9%: Seed
-- 10–29%: Sprout
-- 30–49%: Stem
-- 50–69%: Bud
-- 70–89%: Half Bloom
-- 90–100%: Full Bloom
+### Overall Progress Rate
+- Progress represents advancement toward the exam date.
+- Progress is calculated as:
+  completed study units / total study units planned until the exam date
+- Progress must NOT be based only on daily task completion.
+- Display format:
+  - Numeric percentage (e.g. 37%)
 
 ---
 
-## 6. Weekly / Monthly Views
+## 6. Plan Completion Counts
+
+### Completion Count Display (MUST)
+Completion counts must be displayed as a ratio of completed items to total items.
+
+- Daily: completed tasks / total daily tasks (e.g. 2/3)
+- Weekly: completed items / total weekly items (e.g. 5/10)
+- Monthly: completed items / total monthly items (e.g. 12/40)
+
+Counts must be shown alongside percentage-based progress indicators.
+
+---
+
+## 7. Plan Editing (MUST)
+
+### Editable Plans
+Users must be able to manually edit:
+- Daily plans
+- Weekly plans
+- Monthly plans
+
+### Editable Actions
+- Add a task
+- Remove a task
+- Modify task content
+
+### Constraints
+- System-generated plans remain the default baseline
+- Manual edits must not break overall plan integrity
+- All edits must be reflected in progress and completion calculations
+
+---
+
+## 8. Weekly / Monthly Views
 
 ### Weekly View
-- Weekly goals (review rate, re-solve rate, not raw score)
+- Weekly goals (focused on review rate and re-solving rate)
 - Daily task breakdown
-- Weekly completion indicators
-- Button to auto-generate next week's plan
+- Weekly completion counts and progress
+- Button to auto-generate the next week’s plan
 
 ### Monthly View
 - Phase timeline until exam date
 - Monthly milestones
 - Recommended subject focus ratios (Language vs Logic)
+- Monthly completion counts
 
 ---
 
-## 7. Logging & Analysis
+## 9. Logging & Analysis
 
 ### Logged Data
 - Date
@@ -158,7 +176,7 @@ daily/weekly/monthly plans, and priorities without requiring users to manually p
 
 ---
 
-## 8. Automatic Planning Engine
+## 10. Automatic Planning Engine
 
 ### Inputs
 - Remaining time until exam
@@ -178,34 +196,42 @@ daily/weekly/monthly plans, and priorities without requiring users to manually p
 
 ---
 
-## 9. Settings Screen
+## 11. Settings Screen
 
 ### Core Settings
 - Exam date
 - Daily study time
 - Language vs Logic ratio
 - Timer duration
-- Character animation ON/OFF
 
 ### Theme Settings
-- User selects from predefined color theme sets
+- Users select from predefined color themes only
 - Individual color picking is NOT allowed
 
-### Default Themes
-- LEET Red
-- Calm Blue
-- Forest Green
-- Charcoal Dark
-- Warm Sand
+### Theme Options
+- Red
+- Blue
+- Green
+- Dark
+- Sand
+- Pink
 
-### Theme Implementation Rules
-- CSS variable–based theming
-- Applied via `data-theme` attribute
-- System theme follows OS light/dark setting
+### Theme Rules
+- Theme names must be generic color names only
+- No exam-specific naming in theme labels
+- Themes affect background, surface, and primary accent color
+- Layout and structure must remain identical across themes
+
+### Data Management
+- Provide a "Reset All Data" button
+- Reset must:
+  - Clear all locally stored data (plans, logs, progress)
+  - Require a confirmation step
+- After reset, the app returns to the initial state
 
 ---
 
-## 10. PWA / Technical Requirements
+## 12. PWA / Technical Requirements
 - iOS Safari compatible
 - Add-to-home-screen support
 - Offline usage enabled
@@ -213,21 +239,23 @@ daily/weekly/monthly plans, and priorities without requiring users to manually p
 - Service Worker caching
 
 ### Timer Reliability
-- On returning from background, remaining time must be recalculated
+- When returning from background, remaining time must be recalculated
   using actual elapsed time
 
 ---
 
-## 11. MVP Scope (v1)
-- Main screen (timer, today's tasks, completion rate)
+## 13. MVP Scope (v1)
+- Main screen (timer, D-day, progress)
+- Editable daily / weekly / monthly plans
 - Phase 1 automatic planning
-- Mistake logging and re-solving
+- Progress calculation based on exam-date total plan
+- Completion count displays
 - Theme system
-- Character animation
+- Data reset functionality
 
 ---
 
-## 12. Future Extensions (MAY)
+## 14. Future Extensions (MAY)
 - Push notifications
 - Cloud backup
 - Score trend graphs

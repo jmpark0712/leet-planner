@@ -1,4 +1,4 @@
-const CACHE_NAME = 'leet-planner-v1';
+const CACHE_NAME = 'leet-planner-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   '/js/storage.js',
   '/js/timer.js',
   '/js/planner.js',
+  '/js/calendar.js',
   '/js/app.js',
   '/manifest.json',
   '/icons/icon-192.svg',

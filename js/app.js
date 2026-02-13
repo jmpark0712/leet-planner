@@ -119,6 +119,7 @@ const App = (() => {
       case 'today': await renderTodayView(); break;
       case 'weekly': await renderWeeklyView(); break;
       case 'monthly': renderMonthlyView(); break;
+      case 'calendar': await Calendar.render(); break;
       case 'records': await renderRecordsView(); break;
       case 'settings': loadSettings(); break;
     }
@@ -420,11 +421,12 @@ const App = (() => {
   // ══════════════════════════════════════
 
   function setupRecordsTabs() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    const recordsView = document.getElementById('view-records');
+    recordsView.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tab}`));
+        recordsView.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        recordsView.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tab}`));
       });
     });
   }

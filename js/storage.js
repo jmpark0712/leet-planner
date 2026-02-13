@@ -6,7 +6,7 @@
 
 const Storage = (() => {
   const DB_NAME = 'leet-planner';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   let db = null;
 
   // ── IndexedDB Setup ──
@@ -29,6 +29,19 @@ const Storage = (() => {
         }
         if (!d.objectStoreNames.contains('weeklyPlans')) {
           d.createObjectStore('weeklyPlans', { keyPath: 'weekStart' });
+        }
+        // Calendar stores (v2)
+        if (!d.objectStoreNames.contains('calendarMonthly')) {
+          d.createObjectStore('calendarMonthly', { keyPath: 'key' });
+        }
+        if (!d.objectStoreNames.contains('calendarDaily')) {
+          d.createObjectStore('calendarDaily', { keyPath: 'date' });
+        }
+        if (!d.objectStoreNames.contains('calendarEvaluation')) {
+          d.createObjectStore('calendarEvaluation', { keyPath: 'key' });
+        }
+        if (!d.objectStoreNames.contains('calendarClasses')) {
+          d.createObjectStore('calendarClasses', { keyPath: 'key' });
         }
       };
       req.onsuccess = (e) => { db = e.target.result; resolve(db); };
@@ -219,6 +232,41 @@ const Storage = (() => {
     return dateStr(d);
   }
 
+  // ── Calendar: Monthly ──
+  async function getCalendarMonthly(year, month) {
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    return (await get('calendarMonthly', key)) || { key, year, month, dailyNotes: {}, goal: '', todos: [], memo: '' };
+  }
+  async function saveCalendarMonthly(data) {
+    return put('calendarMonthly', data);
+  }
+
+  // ── Calendar: Daily ──
+  async function getCalendarDaily(date) {
+    return (await get('calendarDaily', date)) || { date, hourlySchedule: {}, topPriorities: [], todos: [], memo: '', goal: '' };
+  }
+  async function saveCalendarDaily(data) {
+    return put('calendarDaily', data);
+  }
+
+  // ── Calendar: Evaluation ──
+  async function getCalendarEvaluation(year, month) {
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    return (await get('calendarEvaluation', key)) || { key, year, month, good: '', bad: '', promise: '' };
+  }
+  async function saveCalendarEvaluation(data) {
+    return put('calendarEvaluation', data);
+  }
+
+  // ── Calendar: Classes ──
+  async function getCalendarClasses(year, month) {
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    return (await get('calendarClasses', key)) || { key, year, month, courses: [] };
+  }
+  async function saveCalendarClasses(data) {
+    return put('calendarClasses', data);
+  }
+
   // ── Init ──
   async function init() {
     await openDB();
@@ -233,6 +281,11 @@ const Storage = (() => {
     getTasksByDate, saveTasks, updateTask, getTasksInRange,
     // Weekly
     getWeeklyPlan, saveWeeklyPlan,
+    // Calendar
+    getCalendarMonthly, saveCalendarMonthly,
+    getCalendarDaily, saveCalendarDaily,
+    getCalendarEvaluation, saveCalendarEvaluation,
+    getCalendarClasses, saveCalendarClasses,
     // Settings
     getSettings, saveSettings,
     // Timer

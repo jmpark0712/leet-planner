@@ -6,7 +6,7 @@
 
 const Storage = (() => {
   const DB_NAME = 'leet-planner';
-  const DB_VERSION = 2;
+  const DB_VERSION = 4;
   let db = null;
 
   // ── IndexedDB Setup ──

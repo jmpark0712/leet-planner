@@ -133,6 +133,21 @@ const App = (() => {
     const settings = Storage.getSettings();
     const remaining = Planner.getRemainingDays(settings.examDate);
 
+    // Encouragement message
+    const ENCOURAGEMENT_MESSAGES = [
+      "오늘도 한 걸음! 🔥 파이팅이에요 미람님💪",
+      "오늘도 최선을 다하는 미람이가 자랑스러워 😊",
+      "미람이가 노력하는 모습, 정말 멋져요 🌻",
+      "미람아, 힘들어도 끝까지! 결과가 기다리고 있어 🎯",
+      "미람아, 오늘도 응원해! 넌 할 수 있어 💪",
+      "백미람 화이팅~~! 오늘 하루도 빛날 거야 ✨",
+      "오늘 공부한 미람이에게 박수! 👏👏👏",
+      "잘하고 있어요 미람님, 믿어보세요 😊",
+      "오늘도 최선을 다하는 미람이가 자랑스러워 😊"
+    ];
+    const dayIndex = new Date().getDate() % ENCOURAGEMENT_MESSAGES.length;
+    document.getElementById('encouragement-msg').textContent = ENCOURAGEMENT_MESSAGES[dayIndex];
+
     // D-day
     const ddayEl = document.getElementById('dday-display');
     ddayEl.textContent = remaining > 0 ? `D-${remaining}` : (remaining === 0 ? 'D-Day' : `D+${Math.abs(remaining)}`);

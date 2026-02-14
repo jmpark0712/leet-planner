@@ -5,8 +5,8 @@
 
 const Calendar = (() => {
   const DAY_NAMES_KR = ['일', '월', '화', '수', '목', '금', '토'];
-  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
+  const MONTH_NAMES = ['1월', '2월', '3월', '4월', '5월', '6월',
+    '7월', '8월', '9월', '10월', '11월', '12월'];
 
   let currentTab = 'monthly';
   let monthlyYear, monthlyMonth;
@@ -73,9 +73,9 @@ const Calendar = (() => {
     // Calendar grid
     let gridHtml = `
       <div class="cal-grid-header">
-        <span>Monday</span><span>Tuesday</span><span>Wednesday</span>
-        <span>Thursday</span><span>Friday</span><span>Saturday</span>
-        <span class="sunday">Sunday</span>
+        <span>월</span><span>화</span><span>수</span>
+        <span>목</span><span>금</span><span>토</span>
+        <span class="sunday">일</span>
       </div>
       <div class="cal-grid-body">`;
 

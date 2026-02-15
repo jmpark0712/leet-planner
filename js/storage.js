@@ -181,7 +181,7 @@ const Storage = (() => {
     languageRatio: 50,
     timerHours: 6,
     animationEnabled: true,
-    theme: 'leet-red'
+    theme: 'light'
   };
 
   function getSettings() {

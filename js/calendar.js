@@ -8,7 +8,7 @@ const Calendar = (() => {
   const MONTH_NAMES = ['1월', '2월', '3월', '4월', '5월', '6월',
     '7월', '8월', '9월', '10월', '11월', '12월'];
 
-  let currentTab = 'monthly';
+  let currentTab = 'weekly';
   let monthlyYear, monthlyMonth;
   let dailyDate;
   let evalYear, evalMonth;
@@ -40,11 +40,103 @@ const Calendar = (() => {
 
   async function renderCurrentTab() {
     switch (currentTab) {
+      case 'weekly': await renderWeekly(); break;
       case 'monthly': await renderMonthly(); break;
       case 'daily': await renderDaily(); break;
       case 'evaluation': await renderEvaluation(); break;
       case 'classes': await renderClasses(); break;
     }
+  }
+  
+  // ══════════════════════════════════════
+  // ══ WEEKLY PAGE
+  // ══════════════════════════════════════
+
+  let currentWeekStart = null;
+
+  async function renderWeekly() {
+    const today = Storage.dateStr(new Date());
+    if (!currentWeekStart) {
+      currentWeekStart = Planner.getWeekStart(today);
+    }
+
+    const container = document.getElementById('cal-weekly');
+    const weekDate = new Date(currentWeekStart + 'T00:00:00');
+    const month = weekDate.getMonth() + 1;
+    const weekNum = Math.ceil(weekDate.getDate() / 7);
+    const rates = await Planner.getWeeklyRates(currentWeekStart);
+
+    let daysHtml = '';
+    for (let i = 0; i < 7; i++) {
+      const d = Storage.addDays(currentWeekStart, i);
+      const dateObj = new Date(d + 'T00:00:00');
+      const dayName = DAY_NAMES_KR[dateObj.getDay()];
+      const displayDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+      const isToday = d === today;
+
+      let tasks = await Storage.getTasksByDate(d);
+      const doneCount = tasks.filter(t => t.completed).length;
+      const totalCount = tasks.length;
+      const dayCompletion = totalCount > 0 ? `${doneCount}/${totalCount}` : '-';
+
+      const tasksHtml = tasks.map(t => {
+        const done = t.completed ? 'done' : '';
+        const checkDone = t.completed ? 'done' : '';
+        const catLabel = Planner.CATEGORY_LABELS[t.category] || '';
+        return `
+          <div class="day-task ${done}">
+            <span class="day-task-check ${checkDone}">${t.completed ? '✓' : ''}</span>
+            <span>${catLabel} ${t.title}</span>
+          </div>
+        `;
+      }).join('');
+
+      daysHtml += `
+        <div class="day-row" ${isToday ? 'style="border-left: 3px solid var(--primary);"' : ''}>
+          <div class="day-header">
+            <span class="day-name">${dayName} <span class="day-date">${displayDate}</span></span>
+            <span class="day-completion">${dayCompletion}</span>
+          </div>
+          <div class="day-tasks">
+            ${tasksHtml || '<div class="day-task" style="opacity:0.4;">계획 없음</div>'}
+          </div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = `
+      <div class="view-header">
+        <h1>주간 계획</h1>
+        <div class="week-selector">
+          <button id="cal-prev-week">←</button>
+          <span class="week-label">${month}월 ${weekNum}주차</span>
+          <button id="cal-next-week">→</button>
+        </div>
+      </div>
+      <div class="weekly-goals">
+        <div class="goal-card">
+          <div class="goal-label">복습률</div>
+          <div class="goal-value">${rates.reviewRate}%</div>
+        </div>
+      </div>
+      <div class="weekly-days">${daysHtml}</div>
+      <button class="primary-btn" id="cal-generate-week-btn">다음 주 계획 생성</button>
+    `;
+
+    document.getElementById('cal-prev-week').onclick = async () => {
+      currentWeekStart = Storage.addDays(currentWeekStart, -7);
+      await renderWeekly();
+    };
+    document.getElementById('cal-next-week').onclick = async () => {
+      currentWeekStart = Storage.addDays(currentWeekStart, 7);
+      await renderWeekly();
+    };
+    document.getElementById('cal-generate-week-btn').onclick = async () => {
+      const nextWeek = Storage.addDays(currentWeekStart, 7);
+      currentWeekStart = nextWeek;
+      await Planner.generateWeeklyPlan(nextWeek);
+      await renderWeekly();
+    };
   }
 
   // ══════════════════════════════════════

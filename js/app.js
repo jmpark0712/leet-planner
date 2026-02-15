@@ -9,7 +9,6 @@
 const App = (() => {
   // ── State ──
   let currentView = 'today';
-  let currentWeekStart = null;
 
   // ── Day names ──
   const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
@@ -24,24 +23,10 @@ const App = (() => {
     { min: 90, max: 100, icon: '🌻', label: '만개' }
   ];
 
-  // ── Mistake reason labels ──
-  const REASON_LABELS = {
-    'misread': '조건 오독',
-    'missing-evidence': '근거 누락',
-    'comparison-fail': '선지 비교 실패',
-    'time-pressure': '시간 부족',
-    'guess': '찍기'
-  };
-
   const SUBJECT_LABELS = {
     'language': '언어이해',
     'logic': '추리논증',
     'essay': '논술'
-  };
-
-  const MATERIAL_LABELS = {
-    'past-exam': '기출문제',
-    'mock': '모의고사'
   };
 
   // ── Init ──
@@ -51,8 +36,6 @@ const App = (() => {
     setupNavigation();
     setupTimer();
     setupSettingsEvents();
-    setupLogModal();
-    setupRecordsTabs();
 
     // Load today view
     await renderTodayView();
@@ -75,8 +58,6 @@ const App = (() => {
 
     document.getElementById('setting-exam-date').value = s.examDate;
     document.getElementById('setting-daily-hours').value = s.dailyStudyHours;
-    document.getElementById('setting-ratio').value = s.languageRatio;
-    document.getElementById('setting-ratio-label').textContent = `${s.languageRatio}:${100 - s.languageRatio}`;
     document.getElementById('setting-timer-hours').value = s.timerHours;
 
     const animToggle = document.getElementById('setting-animation');
@@ -117,10 +98,8 @@ const App = (() => {
     // Render view content
     switch (view) {
       case 'today': await renderTodayView(); break;
-      case 'weekly': await renderWeeklyView(); break;
       case 'monthly': renderMonthlyView(); break;
       case 'calendar': await Calendar.render(); break;
-      case 'records': await renderRecordsView(); break;
       case 'settings': loadSettings(); break;
     }
   }
@@ -300,89 +279,6 @@ const App = (() => {
   }
 
   // ══════════════════════════════════════
-  // ══ WEEKLY VIEW
-  // ══════════════════════════════════════
-
-  async function renderWeeklyView() {
-    const today = Storage.dateStr(new Date());
-    if (!currentWeekStart) {
-      currentWeekStart = Planner.getWeekStart(today);
-    }
-
-    // Week label
-    const weekDate = new Date(currentWeekStart + 'T00:00:00');
-    const month = weekDate.getMonth() + 1;
-    const weekNum = Math.ceil(weekDate.getDate() / 7);
-    document.getElementById('week-label').textContent = `${month}월 ${weekNum}주차`;
-
-    // Navigation
-    document.getElementById('prev-week').onclick = async () => {
-      currentWeekStart = Storage.addDays(currentWeekStart, -7);
-      await renderWeeklyView();
-    };
-    document.getElementById('next-week').onclick = async () => {
-      currentWeekStart = Storage.addDays(currentWeekStart, 7);
-      await renderWeeklyView();
-    };
-
-    // Generate button
-    document.getElementById('generate-week-btn').onclick = async () => {
-      const nextWeek = Storage.addDays(currentWeekStart, 7);
-      currentWeekStart = nextWeek;
-      await Planner.generateWeeklyPlan(nextWeek);
-      await renderWeeklyView();
-    };
-
-    // Weekly rates
-    const rates = await Planner.getWeeklyRates(currentWeekStart);
-    document.getElementById('weekly-review-rate').textContent = `${rates.reviewRate}%`;
-    document.getElementById('weekly-resolve-rate').textContent = `${rates.resolveRate}%`;
-
-    // Days
-    const daysContainer = document.getElementById('weekly-days');
-    let daysHtml = '';
-
-    for (let i = 0; i < 7; i++) {
-      const d = Storage.addDays(currentWeekStart, i);
-      const dateObj = new Date(d + 'T00:00:00');
-      const dayName = DAY_NAMES[dateObj.getDay()];
-      const displayDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-      const isToday = d === today;
-
-      let tasks = await Storage.getTasksByDate(d);
-      const doneCount = tasks.filter(t => t.completed).length;
-      const totalCount = tasks.length;
-      const dayCompletion = totalCount > 0 ? `${doneCount}/${totalCount}` : '-';
-
-      const tasksHtml = tasks.map(t => {
-        const done = t.completed ? 'done' : '';
-        const checkDone = t.completed ? 'done' : '';
-        const catLabel = Planner.CATEGORY_LABELS[t.category] || '';
-        return `
-          <div class="day-task ${done}">
-            <span class="day-task-check ${checkDone}">${t.completed ? '✓' : ''}</span>
-            <span>${catLabel} ${t.title}</span>
-          </div>
-        `;
-      }).join('');
-
-      daysHtml += `
-        <div class="day-row" ${isToday ? 'style="border-left: 3px solid var(--primary);"' : ''}>
-          <div class="day-header">
-            <span class="day-name">${dayName} <span class="day-date">${displayDate}</span></span>
-            <span class="day-completion">${dayCompletion}</span>
-          </div>
-          <div class="day-tasks">
-            ${tasksHtml || '<div class="day-task" style="opacity:0.4;">계획 없음</div>'}
-          </div>
-        </div>
-      `;
-    }
-
-    daysContainer.innerHTML = daysHtml;
-  }
-
-  // ══════════════════════════════════════
   // ══ MONTHLY VIEW
   // ══════════════════════════════════════
 
@@ -418,281 +314,6 @@ const App = (() => {
         <span class="milestone-text">${m.text}</span>
       </div>
     `).join('');
-
-    // Subject ratio
-    const langRatio = settings.languageRatio;
-    const logicRatio = 100 - langRatio;
-    const ratioBar = document.getElementById('monthly-ratio-bar');
-    ratioBar.innerHTML = `
-      <div class="ratio-segment ratio-language" style="width:${langRatio}%">언어 ${langRatio}%</div>
-      <div class="ratio-segment ratio-logic" style="width:${logicRatio}%">추리 ${logicRatio}%</div>
-    `;
-    document.getElementById('ratio-label-lang').textContent = `언어이해 ${langRatio}%`;
-    document.getElementById('ratio-label-logic').textContent = `추리논증 ${logicRatio}%`;
-  }
-
-  // ══════════════════════════════════════
-  // ══ RECORDS VIEW
-  // ══════════════════════════════════════
-
-  function setupRecordsTabs() {
-    const recordsView = document.getElementById('view-records');
-    recordsView.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        recordsView.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-        recordsView.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tab}`));
-      });
-    });
-  }
-
-  async function renderRecordsView() {
-    await renderLogList();
-    await renderAnalysis();
-  }
-
-  async function renderLogList() {
-    const logs = await Storage.getLogs();
-    const container = document.getElementById('log-list');
-
-    if (logs.length === 0) {
-      container.innerHTML = '<div class="empty-state">아직 기록이 없습니다.</div>';
-      return;
-    }
-
-    container.innerHTML = logs.map(l => {
-      const subjectLabel = SUBJECT_LABELS[l.subject] || l.subject;
-      const materialLabel = MATERIAL_LABELS[l.materialType] || l.materialType;
-      const resultClass = l.correct ? 'correct' : 'incorrect';
-      const resultLabel = l.correct ? '정답' : '오답';
-
-      let reasonHtml = '';
-      if (!l.correct && l.mistakeReason) {
-        const reasonLabel = REASON_LABELS[l.mistakeReason] || l.mistakeReason;
-        reasonHtml = `<div class="log-reason">원인: ${reasonLabel}</div>`;
-      }
-
-      let resolveHtml = '';
-      if (!l.correct) {
-        const r7Status = l.resolved7 ? '완료' : l.resolveDate7;
-        const r30Status = l.resolved30 ? '완료' : l.resolveDate30;
-        resolveHtml = `<div class="log-resolve-info">재풀이: 7일(${r7Status}) / 30일(${r30Status})</div>`;
-      }
-
-      return `
-        <div class="log-item">
-          <div class="log-item-header">
-            <span class="log-date">${formatDateShort(l.date)}</span>
-            <span class="log-result ${resultClass}">${resultLabel}</span>
-          </div>
-          <div class="log-detail">
-            <span class="tag tag-${l.subject === 'language' ? 'language' : l.subject === 'logic' ? 'logic' : 'essay'}">${subjectLabel}</span>
-            ${materialLabel}
-          </div>
-          ${reasonHtml}
-          ${resolveHtml}
-        </div>
-      `;
-    }).join('');
-  }
-
-  async function renderAnalysis() {
-    const logs = await Storage.getLogs();
-    const incorrectLogs = logs.filter(l => !l.correct);
-
-    // Top mistake reasons
-    const reasonCounts = {};
-    incorrectLogs.forEach(l => {
-      if (l.mistakeReason) {
-        reasonCounts[l.mistakeReason] = (reasonCounts[l.mistakeReason] || 0) + 1;
-      }
-    });
-
-    const reasonContainer = document.getElementById('mistake-reasons');
-    const maxReasonCount = Math.max(1, ...Object.values(reasonCounts));
-
-    if (Object.keys(reasonCounts).length === 0) {
-      reasonContainer.innerHTML = '<div class="empty-state">오답 데이터가 없습니다.</div>';
-    } else {
-      const sortedReasons = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]);
-      reasonContainer.innerHTML = sortedReasons.map(([reason, count]) => {
-        const label = REASON_LABELS[reason] || reason;
-        const pct = Math.round((count / maxReasonCount) * 100);
-        return `
-          <div class="reason-bar-item">
-            <span class="reason-label">${label}</span>
-            <div class="reason-bar"><div class="reason-bar-fill" style="width:${pct}%"></div></div>
-            <span class="reason-count">${count}</span>
-          </div>
-        `;
-      }).join('');
-    }
-
-    // Weak subjects
-    const subjectCounts = {};
-    incorrectLogs.forEach(l => {
-      subjectCounts[l.subject] = (subjectCounts[l.subject] || 0) + 1;
-    });
-
-    const subjectContainer = document.getElementById('weak-subjects');
-    const maxSubjectCount = Math.max(1, ...Object.values(subjectCounts));
-
-    if (Object.keys(subjectCounts).length === 0) {
-      subjectContainer.innerHTML = '<div class="empty-state">오답 데이터가 없습니다.</div>';
-    } else {
-      const sortedSubjects = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1]);
-      subjectContainer.innerHTML = sortedSubjects.map(([subject, count]) => {
-        const label = SUBJECT_LABELS[subject] || subject;
-        const pct = Math.round((count / maxSubjectCount) * 100);
-        return `
-          <div class="reason-bar-item">
-            <span class="reason-label">${label}</span>
-            <div class="reason-bar"><div class="reason-bar-fill" style="width:${pct}%"></div></div>
-            <span class="reason-count">${count}</span>
-          </div>
-        `;
-      }).join('');
-    }
-
-    // Pending re-solves
-    const resolves = await Storage.getUpcomingResolves();
-    const resolveContainer = document.getElementById('resolve-list');
-
-    if (resolves.length === 0) {
-      resolveContainer.innerHTML = '<div class="empty-state">재풀이 대기 항목이 없습니다.</div>';
-    } else {
-      resolveContainer.innerHTML = resolves.map(r => {
-        const subjectLabel = SUBJECT_LABELS[r.subject] || r.subject;
-        const overdueClass = r.overdue ? 'style="color:var(--primary);font-weight:700;"' : '';
-        return `
-          <div class="resolve-item">
-            <div>
-              <div class="resolve-info">${subjectLabel} (${r.resolveType} 재풀이)</div>
-              <div class="resolve-date" ${overdueClass}>${formatDateShort(r.dueDate)}${r.overdue ? ' (기한 도래)' : ''}</div>
-            </div>
-            <button class="resolve-complete-btn" data-log-id="${r.id}" data-type="${r.resolveType}">완료</button>
-          </div>
-        `;
-      }).join('');
-
-      // Bind complete buttons
-      resolveContainer.querySelectorAll('.resolve-complete-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const logId = btn.dataset.logId;
-          const type = btn.dataset.type;
-          const logs = await Storage.getLogs();
-          const log = logs.find(l => l.id === logId);
-          if (!log) return;
-
-          if (type === '7일') log.resolved7 = true;
-          if (type === '30일') log.resolved30 = true;
-
-          await Storage.updateLog(log);
-          await renderRecordsView();
-        });
-      });
-    }
-  }
-
-  // ══════════════════════════════════════
-  // ══ LOG MODAL
-  // ══════════════════════════════════════
-
-  function setupLogModal() {
-    const modal = document.getElementById('log-modal');
-    const addBtn = document.getElementById('add-log-btn');
-    const closeBtn = document.getElementById('log-modal-close');
-    const saveBtn = document.getElementById('log-save-btn');
-
-    addBtn.addEventListener('click', () => {
-      document.getElementById('log-date').value = Storage.dateStr(new Date());
-      resetModalSelections();
-      modal.classList.add('open');
-    });
-
-    closeBtn.addEventListener('click', () => modal.classList.remove('open'));
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('open');
-    });
-
-    // Radio groups
-    setupRadioGroup('log-subject');
-    setupRadioGroup('log-material');
-    setupRadioGroup('log-correct', (value) => {
-      document.getElementById('mistake-reason-group').style.display = value === 'false' ? 'block' : 'none';
-    });
-
-    // Mistake reason chips
-    document.querySelectorAll('#log-reason .form-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        document.querySelectorAll('#log-reason .form-chip').forEach(c => c.classList.remove('selected'));
-        chip.classList.add('selected');
-      });
-    });
-
-    // Save
-    saveBtn.addEventListener('click', async () => {
-      const date = document.getElementById('log-date').value;
-      const subject = getRadioValue('log-subject');
-      const materialType = getRadioValue('log-material');
-      const correct = getRadioValue('log-correct') === 'true';
-      let mistakeReason = null;
-
-      if (!correct) {
-        const selectedChip = document.querySelector('#log-reason .form-chip.selected');
-        mistakeReason = selectedChip ? selectedChip.dataset.value : null;
-      }
-
-      const entry = {
-        date,
-        subject,
-        materialType,
-        correct,
-        mistakeReason,
-        resolveDate7: correct ? null : Storage.addDays(date, 7),
-        resolveDate30: correct ? null : Storage.addDays(date, 30),
-        resolved7: false,
-        resolved30: false
-      };
-
-      await Storage.addLog(entry);
-      modal.classList.remove('open');
-      await renderRecordsView();
-    });
-  }
-
-  function setupRadioGroup(containerId, onChange) {
-    const container = document.getElementById(containerId);
-    container.querySelectorAll('.form-radio').forEach(radio => {
-      radio.addEventListener('click', () => {
-        container.querySelectorAll('.form-radio').forEach(r => r.classList.remove('selected'));
-        radio.classList.add('selected');
-        if (onChange) onChange(radio.dataset.value);
-      });
-    });
-  }
-
-  function getRadioValue(containerId) {
-    const selected = document.querySelector(`#${containerId} .form-radio.selected`);
-    return selected ? selected.dataset.value : null;
-  }
-
-  function resetModalSelections() {
-    // Reset subject
-    document.querySelectorAll('#log-subject .form-radio').forEach((r, i) => {
-      r.classList.toggle('selected', i === 0);
-    });
-    // Reset material
-    document.querySelectorAll('#log-material .form-radio').forEach((r, i) => {
-      r.classList.toggle('selected', i === 0);
-    });
-    // Reset correct
-    document.querySelectorAll('#log-correct .form-radio').forEach((r, i) => {
-      r.classList.toggle('selected', i === 0);
-    });
-    // Reset reason
-    document.querySelectorAll('#log-reason .form-chip').forEach(c => c.classList.remove('selected'));
-    document.getElementById('mistake-reason-group').style.display = 'none';
   }
 
   // ══════════════════════════════════════
@@ -711,18 +332,6 @@ const App = (() => {
     document.getElementById('setting-daily-hours').addEventListener('change', (e) => {
       const s = Storage.getSettings();
       s.dailyStudyHours = parseInt(e.target.value) || 6;
-      Storage.saveSettings(s);
-    });
-
-    // Ratio slider
-    const ratioSlider = document.getElementById('setting-ratio');
-    ratioSlider.addEventListener('input', (e) => {
-      const val = parseInt(e.target.value);
-      document.getElementById('setting-ratio-label').textContent = `${val}:${100 - val}`;
-    });
-    ratioSlider.addEventListener('change', (e) => {
-      const s = Storage.getSettings();
-      s.languageRatio = parseInt(e.target.value);
       Storage.saveSettings(s);
     });
 
